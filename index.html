@@ -11,7 +11,7 @@
 
         :root {
             --bg-dark: #020305;
-            --parchment: #fdfaf3;
+            --parchment: #f2efe4;
             --text-main: #e2e2e7;
         }
 
@@ -22,7 +22,7 @@
             font-family: 'Inter', sans-serif;
             color: var(--text-main);
             user-select: none;
-            touch-action: none; /* Crucial for custom pinch/drag gestures */
+            touch-action: none;
         }
 
         #canvas-container {
@@ -70,23 +70,25 @@
             justify-content: center;
             z-index: 1000;
             opacity: 0;
+            visibility: hidden;
             pointer-events: none;
-            transition: opacity 0.8s ease;
+            transition: opacity 0.8s ease, visibility 0.8s;
         }
 
         .modal-overlay.active {
             opacity: 1;
+            visibility: visible;
             pointer-events: auto;
         }
 
         .parchment {
             background: var(--parchment);
-            background-image: url('https://www.transparenttextures.com/patterns/paper-fibers.png');
+            background-image: url("https://www.transparenttextures.com/patterns/natural-paper.png");
             color: #3d352a;
-            padding: clamp(1.5rem, 5vw, 3rem);
+            padding: 2.5rem;
             box-shadow: 0 30px 80px rgba(0,0,0,0.8);
-            border-radius: 4px;
-            max-width: 500px;
+            border-radius: 2px;
+            max-width: 480px;
             width: 90%;
             text-align: center;
             z-index: 1001;
@@ -96,33 +98,46 @@
         textarea {
             background: transparent;
             border: none;
-            border-bottom: 1px solid rgba(0,0,0,0.1);
             color: #3d352a;
             resize: none;
             outline: none;
             padding: 1rem 0;
             font-family: 'Cormorant Garamond', serif;
-            font-size: 1.4rem;
+            font-size: 1.5rem;
             line-height: 1.6;
             width: 100%;
-            margin: 1.5rem 0;
+            height: 150px;
+            margin: 1rem 0;
         }
 
-        .btn-gold {
-            background: #1a1814;
-            color: #f4f1ea;
-            padding: 0.8rem 2.5rem;
+        textarea::placeholder {
+            color: rgba(61, 53, 42, 0.3);
+            font-style: italic;
+        }
+
+        .btn-action {
+            padding: 0.8rem 1.5rem;
             font-size: 0.75rem;
-            letter-spacing: 0.2em;
+            letter-spacing: 0.15em;
             text-transform: uppercase;
             transition: all 0.3s ease;
             cursor: pointer;
             border: none;
-            display: inline-block;
-            pointer-events: auto !important;
+            font-weight: 500;
         }
 
-        .btn-gold:disabled {
+        .btn-cancel {
+            background: transparent;
+            color: rgba(0, 0, 0, 0.4);
+        }
+
+        .btn-send {
+            background: #1a1814;
+            color: #f4f1ea;
+            border-radius: 4px;
+        }
+
+        .btn-send:disabled {
             opacity: 0.5;
             cursor: not-allowed;
         }
@@ -133,12 +148,13 @@
             left: 50%;
             transform: translate(-50%, -50%) scale(0.95);
             background: var(--parchment);
-            background-image: url('https://www.transparenttextures.com/patterns/paper-fibers.png');
+            background-image: url('https://www.transparenttextures.com/patterns/natural-paper.png');
             color: #3d352a;
             padding: 4rem 3rem;
             width: 85%;
             max-width: 450px;
             opacity: 0;
+            visibility: hidden;
             pointer-events: none;
             transition: all 0.5s cubic-bezier(0.16, 1, 0.3, 1);
             z-index: 1500;
@@ -148,8 +164,20 @@
 
         #note-viewer.active {
             opacity: 1;
+            visibility: visible;
             pointer-events: auto;
             transform: translate(-50%, -50%) scale(1);
+        }
+
+        #note-timestamp {
+            position: absolute;
+            top: 2rem;
+            left: 2rem;
+            font-size: 10px;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            color: rgba(0,0,0,0.3);
+            font-weight: 500;
         }
 
         #loading-screen {
@@ -206,25 +234,26 @@
         <footer class="text-center mb-12 flex flex-col items-center">
             <p class="text-[8px] uppercase tracking-[0.3em] opacity-40 mb-6">Pinch to zoom • Drag to rotate • Tap a note to read</p>
             <button id="open-modal" class="interactive px-12 py-4 rounded-full border border-white/20 bg-white/5 text-white text-[10px] uppercase tracking-widest transition-all hover:bg-white/10 hover:border-white/40">
-                Lay down a prayer
+                Send a message
             </button>
         </footer>
     </div>
 
     <div id="note-modal" class="modal-overlay">
         <div class="parchment" id="parchment-container">
-            <h2 class="serif text-3xl italic">What are you laying down?</h2>
-            <textarea id="note-text" placeholder="I lay down..." class="interactive"></textarea>
-            <div class="flex flex-col items-center">
-                <button id="submit-note" class="btn-gold interactive">Confirm</button>
-                <button id="close-modal" class="mt-6 text-[10px] uppercase tracking-widest opacity-40 hover:opacity-100 cursor-pointer interactive">Cancel</button>
+            <h2 class="serif text-2xl md:text-3xl italic mb-4">What are you laying down today?</h2>
+            <textarea id="note-text" placeholder="Start typing..." class="interactive"></textarea>
+            <div class="flex items-center justify-between mt-6 w-full px-2">
+                <button id="close-modal" class="btn-action btn-cancel interactive">Cancel</button>
+                <button id="submit-note" class="btn-action btn-send interactive">Send</button>
             </div>
         </div>
     </div>
 
     <div id="note-viewer">
+        <div id="note-timestamp"></div>
         <div id="viewer-content" class="serif italic text-2xl leading-relaxed mb-6"></div>
-        <button id="close-viewer" class="btn-gold interactive">Return</button>
+        <button id="close-viewer" class="btn-action btn-send interactive w-full">Return</button>
     </div>
 
     <script type="module">
@@ -280,14 +309,16 @@
         let theta = Math.PI / 4, phi = Math.PI / 2.5;
         let currentRadius = 15, targetRadius = 15;
         
-        // Input state for mobile gestures
+        let shimmerIntensity = 0;
+        let shimmerStartTime = 0;
+        let mainSpot;
+
         const evCache = [];
         let prevDiff = -1;
 
         let raycaster = new THREE.Raycaster();
-        // Dynamic threshold based on device (larger for mobile)
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        raycaster.params.Mesh.threshold = isMobile ? 0.3 : 0.1; 
+        raycaster.params.Mesh.threshold = isMobile ? 0.6 : 0.3; 
         
         let mouse = new THREE.Vector2();
 
@@ -333,10 +364,10 @@
             const hemi = new THREE.HemisphereLight(0x445566, 0x111111, 0.5);
             scene.add(hemi);
 
-            const frontSpot = new THREE.SpotLight(0xfffaf0, 2.5, 40, Math.PI/4, 0.7, 1);
-            frontSpot.position.set(-5, 8, 10);
-            frontSpot.castShadow = true;
-            scene.add(frontSpot);
+            mainSpot = new THREE.SpotLight(0xfffaf0, 2.5, 40, Math.PI/4, 0.7, 1);
+            mainSpot.position.set(-5, 8, 10);
+            mainSpot.castShadow = true;
+            scene.add(mainSpot);
 
             const rimLight = new THREE.SpotLight(0xffffff, 1.5, 30, Math.PI/4, 0.5, 1);
             rimLight.position.set(5, 5, -5);
@@ -388,6 +419,10 @@
             }
         }
 
+        function triggerShimmer() {
+            shimmerStartTime = Date.now();
+        }
+
         function syncData() {
             if (!db || !user) return;
             const notesCol = collection(db, 'artifacts', 'prayer-app', 'public', 'data', 'notes');
@@ -395,38 +430,76 @@
                 snapshot.docChanges().forEach((change) => {
                     if (change.type === "added") {
                         const data = change.doc.data();
-                        addNoteToScene(data.text, change.doc.id);
+                        addNoteToScene(data.text, change.doc.id, data.createdAt);
                     }
                 });
                 hideLoader();
             }, (err) => { hideLoader(); });
         }
 
-        function addNoteToScene(text, id) {
+        function addNoteToScene(text, id, timestamp) {
             if (noteMeshes.has(id)) return;
+            
+            let displayDate = "Lately";
+            if (timestamp) {
+                const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+                displayDate = date.toLocaleString('en-US', { 
+                    month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' 
+                });
+            }
+
             const seed = Array.from(id).reduce((acc, char) => acc + char.charCodeAt(0), 0) / 1000;
+            const group = new THREE.Group();
             const geo = createCurvedPaperGeometry(seed);
             const mat = new THREE.MeshStandardMaterial({ 
                 color: 0xffffff, side: THREE.DoubleSide, emissive: 0xfffef0, emissiveIntensity: 0.4 
             });
-            const mesh = new THREE.Mesh(geo, mat);
-            mesh.userData = {
+            const paperMesh = new THREE.Mesh(geo, mat);
+            paperMesh.castShadow = true;
+            group.add(paperMesh);
+
+            const hitBoxGeo = new THREE.SphereGeometry(isMobile ? 0.6 : 0.4);
+            const hitBoxMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
+            const hitBox = new THREE.Mesh(hitBoxGeo, hitBoxMat);
+            group.add(hitBox);
+
+            group.userData = {
+                id: id,
                 message: text,
+                time: displayDate,
                 angle: seed * Math.PI * 2,
                 radius: 3 + (seed % 1) * 5,
                 height: 1.5 + (seed % 0.8) * 5,
                 speed: 0.001 + (seed % 0.002),
                 wobble: seed * 5
             };
-            mesh.castShadow = true;
-            scene.add(mesh);
-            notes.push(mesh);
-            noteMeshes.set(id, mesh);
+
+            scene.add(group);
+            notes.push(group);
+            noteMeshes.set(id, group);
         }
 
         function animate() {
             requestAnimationFrame(animate);
             const time = Date.now() * 0.001;
+
+            if (shimmerStartTime > 0) {
+                const elapsed = Date.now() - shimmerStartTime;
+                const duration = 2000;
+                if (elapsed < duration) {
+                    const progress = elapsed / duration;
+                    shimmerIntensity = Math.sin(progress * Math.PI);
+                    scene.fog.density = 0.07 - (shimmerIntensity * 0.04);
+                    mainSpot.intensity = 2.5 + (shimmerIntensity * 4.0);
+                    scene.background.setRGB(0.008 + shimmerIntensity * 0.05, 0.01 + shimmerIntensity * 0.05, 0.02 + shimmerIntensity * 0.05);
+                } else {
+                    shimmerStartTime = 0;
+                    shimmerIntensity = 0;
+                    scene.fog.density = 0.07;
+                    mainSpot.intensity = 2.5;
+                    scene.background.setHex(0x020305);
+                }
+            }
 
             currentRadius = THREE.MathUtils.lerp(currentRadius, targetRadius, 0.1);
             camera.position.x = currentRadius * Math.sin(phi) * Math.sin(theta);
@@ -434,20 +507,21 @@
             camera.position.z = currentRadius * Math.sin(phi) * Math.cos(theta);
             camera.lookAt(0, 4, 0);
 
-            notes.forEach(n => {
-                const d = n.userData;
+            notes.forEach(group => {
+                const d = group.userData;
                 d.angle += d.speed;
-                n.position.x = Math.cos(d.angle) * d.radius;
-                n.position.z = Math.sin(d.angle) * d.radius;
-                n.position.y = d.height + Math.sin(time + d.wobble) * 0.3;
-                n.rotation.y += 0.01;
-                n.rotation.z = Math.sin(time * 0.5 + d.wobble) * 0.1;
-                n.material.emissiveIntensity = 0.3 + Math.sin(time * 2 + d.wobble) * 0.2;
+                group.position.x = Math.cos(d.angle) * d.radius;
+                group.position.z = Math.sin(d.angle) * d.radius;
+                group.position.y = d.height + Math.sin(time + d.wobble) * 0.3;
+                group.rotation.y += 0.01;
+                group.rotation.z = Math.sin(time * 0.5 + d.wobble) * 0.1;
+                const paper = group.children[0];
+                paper.material.emissiveIntensity = 0.3 + Math.sin(time * 2 + d.wobble) * 0.2 + (shimmerIntensity * 0.5);
             });
 
             if (!isDragging && !isMobile) {
                 raycaster.setFromCamera(mouse, camera);
-                const intersects = raycaster.intersectObjects(notes);
+                const intersects = raycaster.intersectObjects(notes, true);
                 document.body.style.cursor = (intersects.length > 0) ? 'pointer' : 'default';
             }
 
@@ -461,7 +535,6 @@
         const viewer = document.getElementById('note-viewer');
         const closeViewer = document.getElementById('close-viewer');
 
-        // Use pointerdown with stopPropagation to ensure UI interaction on mobile
         openBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); modal.classList.add('active'); });
         closeBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); modal.classList.remove('active'); });
         closeViewer.addEventListener('pointerdown', (e) => { e.stopPropagation(); viewer.classList.remove('active'); });
@@ -476,27 +549,23 @@
             try {
                 const notesCol = collection(db, 'artifacts', 'prayer-app', 'public', 'data', 'notes');
                 await addDoc(notesCol, { text: val, userId: user.uid, createdAt: serverTimestamp() });
-                showStatus("PRAYER LAID AT THE CROSS", "success");
+                
+                triggerShimmer();
+                showStatus("MESSAGE SENT", "success");
                 textInput.value = "";
                 modal.classList.remove('active');
             } catch (err) {
-                showStatus("Error saving prayer", "error");
+                showStatus("Error saving message", "error");
             } finally {
                 submitBtn.disabled = false;
-                submitBtn.innerText = "Confirm";
+                submitBtn.innerText = "Send";
             }
         };
 
         submitBtn.addEventListener('pointerdown', handleFormSubmit);
 
-        // INPUT HANDLING (Mobile Optimized)
-        
-        const container = document.body;
-
+        const container = document.getElementById('canvas-container');
         container.addEventListener('pointerdown', (e) => {
-            // If we're clicking interactive UI elements, don't start a scene drag
-            if (e.target.closest('.interactive')) return;
-            
             if(modal.classList.contains('active') || viewer.classList.contains('active')) return;
             evCache.push(e);
             if (evCache.length === 1) {
@@ -509,14 +578,11 @@
             }
         });
 
-        container.addEventListener('pointermove', (e) => {
+        window.addEventListener('pointermove', (e) => {
             mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-
             const index = evCache.findIndex((item) => item.pointerId === e.pointerId);
             if (index > -1) evCache[index] = e;
-
-            // Handle Pinch-to-Zoom
             if (evCache.length === 2) {
                 const curDiff = Math.hypot(evCache[0].clientX - evCache[1].clientX, evCache[0].clientY - evCache[1].clientY);
                 if (prevDiff > 0) {
@@ -526,13 +592,10 @@
                 prevDiff = curDiff;
                 return;
             }
-
             if (!isDragging || evCache.length !== 1) return;
-
             const moveX = e.clientX - previousMouseX;
             const moveY = e.clientY - previousMouseY;
             if (Math.hypot(e.clientX - startX, e.clientY - startY) > 8) dragThresholdMet = true;
-
             theta -= moveX * 0.005;
             phi = Math.max(0.2, Math.min(Math.PI/2 - 0.2, phi - moveY * 0.005));
             previousMouseX = e.clientX;
@@ -543,31 +606,31 @@
             const index = evCache.findIndex((item) => item.pointerId === e.pointerId);
             if (index > -1) evCache.splice(index, 1);
             if (evCache.length < 2) prevDiff = -1;
-
-            if (evCache.length === 0) {
-                if (isDragging && !dragThresholdMet) {
-                    // It was a clean tap/click on the scene (not UI)
+            if (evCache.length === 0 && isDragging) {
+                if (!dragThresholdMet) {
                     raycaster.setFromCamera(mouse, camera);
-                    const hits = raycaster.intersectObjects(notes);
+                    const hits = raycaster.intersectObjects(notes, true);
                     if (hits.length > 0) {
-                        document.getElementById('viewer-content').innerText = hits[0].object.userData.message;
-                        viewer.classList.add('active');
+                        let target = hits[0].object;
+                        while(target.parent && !target.userData.message) {
+                            target = target.parent;
+                        }
+                        if (target.userData.message) {
+                            document.getElementById('viewer-content').innerText = target.userData.message;
+                            document.getElementById('note-timestamp').innerText = target.userData.time;
+                            viewer.classList.add('active');
+                        }
                     }
                 }
                 isDragging = false;
             }
         };
 
-        container.addEventListener('pointerup', pointerUpHandler);
-        container.addEventListener('pointercancel', pointerUpHandler);
-        container.addEventListener('pointerout', pointerUpHandler);
-        container.addEventListener('pointerleave', pointerUpHandler);
-
-        // Scroll Wheel fallback for Desktop Zoom
+        window.addEventListener('pointerup', pointerUpHandler);
+        window.addEventListener('pointercancel', pointerUpHandler);
         window.addEventListener('wheel', (e) => {
             targetRadius = Math.max(8, Math.min(35, targetRadius + e.deltaY * 0.01));
         }, { passive: true });
-
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
