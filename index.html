@@ -461,11 +461,13 @@
         const viewer = document.getElementById('note-viewer');
         const closeViewer = document.getElementById('close-viewer');
 
-        openBtn.addEventListener('click', (e) => { e.stopPropagation(); modal.classList.add('active'); });
-        closeBtn.addEventListener('click', (e) => { e.stopPropagation(); modal.classList.remove('active'); });
-        closeViewer.addEventListener('click', (e) => { e.stopPropagation(); viewer.classList.remove('active'); });
+        // Use pointerdown with stopPropagation to ensure UI interaction on mobile
+        openBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); modal.classList.add('active'); });
+        closeBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); modal.classList.remove('active'); });
+        closeViewer.addEventListener('pointerdown', (e) => { e.stopPropagation(); viewer.classList.remove('active'); });
 
-        submitBtn.addEventListener('click', async (e) => {
+        const handleFormSubmit = async (e) => {
+            if (e) e.stopPropagation();
             const textInput = document.getElementById('note-text');
             const val = textInput.value.trim();
             if(!val || !user) return;
@@ -483,13 +485,18 @@
                 submitBtn.disabled = false;
                 submitBtn.innerText = "Confirm";
             }
-        });
+        };
+
+        submitBtn.addEventListener('pointerdown', handleFormSubmit);
 
         // INPUT HANDLING (Mobile Optimized)
         
         const container = document.body;
 
         container.addEventListener('pointerdown', (e) => {
+            // If we're clicking interactive UI elements, don't start a scene drag
+            if (e.target.closest('.interactive')) return;
+            
             if(modal.classList.contains('active') || viewer.classList.contains('active')) return;
             evCache.push(e);
             if (evCache.length === 1) {
@@ -539,7 +546,7 @@
 
             if (evCache.length === 0) {
                 if (isDragging && !dragThresholdMet) {
-                    // It was a clean tap/click
+                    // It was a clean tap/click on the scene (not UI)
                     raycaster.setFromCamera(mouse, camera);
                     const hits = raycaster.intersectObjects(notes);
                     if (hits.length > 0) {
