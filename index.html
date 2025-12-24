@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Lay It on the Cross | A Digital Prayer Space</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
@@ -22,7 +22,7 @@
             font-family: 'Inter', sans-serif;
             color: var(--text-main);
             user-select: none;
-            touch-action: none;
+            touch-action: none; /* Crucial for custom pinch/drag gestures */
         }
 
         #canvas-container {
@@ -204,7 +204,7 @@
         </header>
 
         <footer class="text-center mb-12 flex flex-col items-center">
-            <p class="text-[8px] uppercase tracking-[0.3em] opacity-40 mb-6">Drag to rotate • Tap a floating note to read</p>
+            <p class="text-[8px] uppercase tracking-[0.3em] opacity-40 mb-6">Pinch to zoom • Drag to rotate • Tap a note to read</p>
             <button id="open-modal" class="interactive px-12 py-4 rounded-full border border-white/20 bg-white/5 text-white text-[10px] uppercase tracking-widest transition-all hover:bg-white/10 hover:border-white/40">
                 Lay down a prayer
             </button>
@@ -255,16 +255,21 @@
             }
         }
 
-        window.addEventListener('error', (event) => {
-            showStatus("SCRIPT ERROR: " + event.message, "error");
-        });
+        function hideLoader() {
+            const loader = document.getElementById('loading-screen');
+            if(loader) {
+                loader.style.opacity = '0';
+                setTimeout(() => loader.remove(), 1000);
+            }
+        }
 
         try {
             app = initializeApp(firebaseConfig);
             db = getFirestore(app);
             auth = getAuth(app);
         } catch (e) {
-            showStatus("INIT FAILED: " + e.message, "error", 0);
+            showStatus("Initialization Failed", "error", 0);
+            hideLoader();
         }
 
         let scene, camera, renderer, notes = [];
@@ -274,9 +279,15 @@
         let previousMouseX = 0, previousMouseY = 0;
         let theta = Math.PI / 4, phi = Math.PI / 2.5;
         let currentRadius = 15, targetRadius = 15;
+        
+        // Input state for mobile gestures
+        const evCache = [];
+        let prevDiff = -1;
+
         let raycaster = new THREE.Raycaster();
-        // Increase hit sensitivity for small moving objects
-        raycaster.params.Points.threshold = 0.1;
+        // Dynamic threshold based on device (larger for mobile)
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        raycaster.params.Mesh.threshold = isMobile ? 0.3 : 0.1; 
         
         let mouse = new THREE.Vector2();
 
@@ -295,7 +306,7 @@
         }
 
         function createCurvedPaperGeometry(seed) {
-            const geo = new THREE.PlaneGeometry(0.5, 0.4, 8, 8); // Slightly larger
+            const geo = new THREE.PlaneGeometry(0.5, 0.4, 8, 8);
             const pos = geo.attributes.position;
             for (let i = 0; i < pos.count; i++) {
                 const x = pos.getX(i);
@@ -314,7 +325,7 @@
             camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             renderer.shadowMap.enabled = true;
             document.getElementById('canvas-container').appendChild(renderer.domElement);
 
@@ -355,17 +366,10 @@
 
             animate();
 
-            if (auth) {
-                setupAuth();
-            }
+            if (auth) setupAuth();
+            else hideLoader();
 
-            setTimeout(() => {
-                const loader = document.getElementById('loading-screen');
-                if(loader) {
-                    loader.style.opacity = '0';
-                    setTimeout(() => loader.remove(), 1000);
-                }
-            }, 1000);
+            setTimeout(hideLoader, 6000);
         }
 
         async function setupAuth() {
@@ -376,17 +380,17 @@
                     if (user) {
                         showStatus("Connection Established", "success");
                         syncData(); 
-                    }
+                    } else hideLoader();
                 });
             } catch (err) {
-                showStatus("AUTHENTICATION ERROR", "error", 0);
+                showStatus("Offline Mode", "error");
+                hideLoader();
             }
         }
 
         function syncData() {
             if (!db || !user) return;
             const notesCol = collection(db, 'artifacts', 'prayer-app', 'public', 'data', 'notes');
-            
             onSnapshot(query(notesCol, limit(100)), (snapshot) => {
                 snapshot.docChanges().forEach((change) => {
                     if (change.type === "added") {
@@ -394,9 +398,8 @@
                         addNoteToScene(data.text, change.doc.id);
                     }
                 });
-            }, (err) => {
-                showStatus("SYNC ERROR: " + err.code, "error", 0);
-            });
+                hideLoader();
+            }, (err) => { hideLoader(); });
         }
 
         function addNoteToScene(text, id) {
@@ -407,7 +410,6 @@
                 color: 0xffffff, side: THREE.DoubleSide, emissive: 0xfffef0, emissiveIntensity: 0.4 
             });
             const mesh = new THREE.Mesh(geo, mat);
-            
             mesh.userData = {
                 message: text,
                 angle: seed * Math.PI * 2,
@@ -416,7 +418,6 @@
                 speed: 0.001 + (seed % 0.002),
                 wobble: seed * 5
             };
-            
             mesh.castShadow = true;
             scene.add(mesh);
             notes.push(mesh);
@@ -427,7 +428,7 @@
             requestAnimationFrame(animate);
             const time = Date.now() * 0.001;
 
-            currentRadius = THREE.MathUtils.lerp(currentRadius, targetRadius, 0.05);
+            currentRadius = THREE.MathUtils.lerp(currentRadius, targetRadius, 0.1);
             camera.position.x = currentRadius * Math.sin(phi) * Math.sin(theta);
             camera.position.y = currentRadius * Math.cos(phi);
             camera.position.z = currentRadius * Math.sin(phi) * Math.cos(theta);
@@ -444,13 +445,10 @@
                 n.material.emissiveIntensity = 0.3 + Math.sin(time * 2 + d.wobble) * 0.2;
             });
 
-            // Hover cursor effect
-            raycaster.setFromCamera(mouse, camera);
-            const intersects = raycaster.intersectObjects(notes);
-            if (intersects.length > 0 && !modal.classList.contains('active')) {
-                document.body.style.cursor = 'pointer';
-            } else {
-                document.body.style.cursor = 'default';
+            if (!isDragging && !isMobile) {
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(notes);
+                document.body.style.cursor = (intersects.length > 0) ? 'pointer' : 'default';
             }
 
             renderer.render(scene, camera);
@@ -463,98 +461,105 @@
         const viewer = document.getElementById('note-viewer');
         const closeViewer = document.getElementById('close-viewer');
 
-        openBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            modal.classList.add('active');
-        });
-
-        closeBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            modal.classList.remove('active');
-        });
-
-        closeViewer.addEventListener('click', (e) => {
-            e.stopPropagation();
-            viewer.classList.remove('active');
-        });
+        openBtn.addEventListener('click', (e) => { e.stopPropagation(); modal.classList.add('active'); });
+        closeBtn.addEventListener('click', (e) => { e.stopPropagation(); modal.classList.remove('active'); });
+        closeViewer.addEventListener('click', (e) => { e.stopPropagation(); viewer.classList.remove('active'); });
 
         submitBtn.addEventListener('click', async (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            
             const textInput = document.getElementById('note-text');
             const val = textInput.value.trim();
-            
-            if(!val) return;
-            if(!user) return;
-
+            if(!val || !user) return;
             submitBtn.disabled = true;
             submitBtn.innerText = "SENDING...";
-
             try {
                 const notesCol = collection(db, 'artifacts', 'prayer-app', 'public', 'data', 'notes');
-                await addDoc(notesCol, {
-                    text: val, 
-                    userId: user.uid, 
-                    createdAt: serverTimestamp() 
-                });
+                await addDoc(notesCol, { text: val, userId: user.uid, createdAt: serverTimestamp() });
                 showStatus("PRAYER LAID AT THE CROSS", "success");
                 textInput.value = "";
                 modal.classList.remove('active');
             } catch (err) {
-                showStatus("ERROR: " + err.code, "error");
+                showStatus("Error saving prayer", "error");
             } finally {
                 submitBtn.disabled = false;
                 submitBtn.innerText = "Confirm";
             }
         });
 
-        window.addEventListener('pointerdown', (e) => { 
+        // INPUT HANDLING (Mobile Optimized)
+        
+        const container = document.body;
+
+        container.addEventListener('pointerdown', (e) => {
             if(modal.classList.contains('active') || viewer.classList.contains('active')) return;
-            isDragging = true; 
-            dragThresholdMet = false;
-            startX = e.clientX;
-            startY = e.clientY;
-            previousMouseX = e.clientX; 
-            previousMouseY = e.clientY; 
+            evCache.push(e);
+            if (evCache.length === 1) {
+                isDragging = true;
+                dragThresholdMet = false;
+                startX = e.clientX;
+                startY = e.clientY;
+                previousMouseX = e.clientX;
+                previousMouseY = e.clientY;
+            }
         });
 
-        window.addEventListener('pointermove', (e) => {
-            // Track mouse for hover effect
+        container.addEventListener('pointermove', (e) => {
             mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
 
-            if (!isDragging) return;
+            const index = evCache.findIndex((item) => item.pointerId === e.pointerId);
+            if (index > -1) evCache[index] = e;
+
+            // Handle Pinch-to-Zoom
+            if (evCache.length === 2) {
+                const curDiff = Math.hypot(evCache[0].clientX - evCache[1].clientX, evCache[0].clientY - evCache[1].clientY);
+                if (prevDiff > 0) {
+                    const zoomSensitivity = 0.05;
+                    targetRadius = Math.max(8, Math.min(35, targetRadius - (curDiff - prevDiff) * zoomSensitivity));
+                }
+                prevDiff = curDiff;
+                return;
+            }
+
+            if (!isDragging || evCache.length !== 1) return;
 
             const moveX = e.clientX - previousMouseX;
             const moveY = e.clientY - previousMouseY;
-            
-            if (Math.abs(e.clientX - startX) > 5 || Math.abs(e.clientY - startY) > 5) {
-                dragThresholdMet = true;
-            }
+            if (Math.hypot(e.clientX - startX, e.clientY - startY) > 8) dragThresholdMet = true;
 
             theta -= moveX * 0.005;
             phi = Math.max(0.2, Math.min(Math.PI/2 - 0.2, phi - moveY * 0.005));
-            previousMouseX = e.clientX; 
+            previousMouseX = e.clientX;
             previousMouseY = e.clientY;
         });
 
-        window.addEventListener('pointerup', (e) => {
-            if (!isDragging) return;
-            isDragging = false;
+        const pointerUpHandler = (e) => {
+            const index = evCache.findIndex((item) => item.pointerId === e.pointerId);
+            if (index > -1) evCache.splice(index, 1);
+            if (evCache.length < 2) prevDiff = -1;
 
-            // If it was a drag, don't trigger a click
-            if (dragThresholdMet) return;
-
-            if(modal.classList.contains('active') || viewer.classList.contains('active')) return;
-            
-            raycaster.setFromCamera(mouse, camera);
-            const hits = raycaster.intersectObjects(notes);
-            if (hits.length > 0) {
-                document.getElementById('viewer-content').innerText = hits[0].object.userData.message;
-                viewer.classList.add('active');
+            if (evCache.length === 0) {
+                if (isDragging && !dragThresholdMet) {
+                    // It was a clean tap/click
+                    raycaster.setFromCamera(mouse, camera);
+                    const hits = raycaster.intersectObjects(notes);
+                    if (hits.length > 0) {
+                        document.getElementById('viewer-content').innerText = hits[0].object.userData.message;
+                        viewer.classList.add('active');
+                    }
+                }
+                isDragging = false;
             }
-        });
+        };
+
+        container.addEventListener('pointerup', pointerUpHandler);
+        container.addEventListener('pointercancel', pointerUpHandler);
+        container.addEventListener('pointerout', pointerUpHandler);
+        container.addEventListener('pointerleave', pointerUpHandler);
+
+        // Scroll Wheel fallback for Desktop Zoom
+        window.addEventListener('wheel', (e) => {
+            targetRadius = Math.max(8, Math.min(35, targetRadius + e.deltaY * 0.01));
+        }, { passive: true });
 
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
