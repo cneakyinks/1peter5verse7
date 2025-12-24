@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lay It on the Cross</title>
+    <title>Lay It on the Cross | A Digital Prayer Space</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
@@ -34,7 +34,6 @@
             z-index: 1;
         }
 
-        /* UI Overlays */
         .ui-layer {
             position: relative;
             z-index: 10;
@@ -61,7 +60,6 @@
 
         .interactive { pointer-events: auto; }
 
-        /* Modal & Viewer Styling */
         .modal-overlay {
             position: fixed;
             inset: 0;
@@ -120,8 +118,6 @@
             border: none;
             display: inline-block;
         }
-
-        .btn-gold:hover { background: #333; }
 
         #note-viewer {
             position: fixed;
@@ -203,11 +199,18 @@
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
         import { getFirestore, collection, addDoc, onSnapshot, query, limit } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
 
-        // Global environment variables provided by your platform
-        const firebaseConfig = JSON.parse(__firebase_config);
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'letters-at-the-cross';
+        // --- STEP 1: FIREBASE CONFIGURATION ---
+        // Replace the object below with your actual config from the Firebase Console
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_ID",
+            appId: "YOUR_APP_ID"
+        };
         
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
@@ -222,7 +225,6 @@
         let mouse = new THREE.Vector2();
         let user = null;
 
-        // --- Assets ---
         function createStoneTexture() {
             const canvas = document.createElement('canvas');
             canvas.width = 512; canvas.height = 512;
@@ -249,7 +251,6 @@
             return geo;
         }
 
-        // --- Core Scene ---
         async function init() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x020305);
@@ -262,7 +263,6 @@
             renderer.shadowMap.enabled = true;
             document.getElementById('canvas-container').appendChild(renderer.domElement);
 
-            // Lighting
             scene.add(new THREE.AmbientLight(0xffffff, 0.05));
             const hemi = new THREE.HemisphereLight(0x445566, 0x111111, 0.5);
             scene.add(hemi);
@@ -276,7 +276,6 @@
             rimLight.position.set(5, 5, -5);
             scene.add(rimLight);
 
-            // Cross
             const stoneTex = createStoneTexture();
             const stoneMat = new THREE.MeshStandardMaterial({ 
                 color: 0xcccccc, map: stoneTex, bumpMap: stoneTex, bumpScale: 0.15, roughness: 0.9 
@@ -291,7 +290,6 @@
             cross.add(vert, horiz);
             scene.add(cross);
 
-            // Floor
             const ground = new THREE.Mesh(
                 new THREE.PlaneGeometry(100, 100), 
                 new THREE.MeshStandardMaterial({ color: 0x050505, roughness: 1 })
@@ -311,23 +309,20 @@
         }
 
         async function setupAuth() {
-            const initAuth = async () => {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            };
+            try {
+                await signInAnonymously(auth);
+            } catch (err) {
+                console.error("Auth failed:", err);
+            }
             onAuthStateChanged(auth, (u) => { 
                 user = u; 
                 if (user) syncData(); 
             });
-            await initAuth();
         }
 
         function syncData() {
-            // Fetching notes from Firestore
-            const notesCol = collection(db, 'artifacts', appId, 'public', 'data', 'notes');
+            // Path setup: artifacts/default/public/data/notes
+            const notesCol = collection(db, 'artifacts', 'prayer-app', 'public', 'data', 'notes');
             onSnapshot(query(notesCol, limit(100)), (snapshot) => {
                 snapshot.docChanges().forEach((change) => {
                     if (change.type === "added") {
@@ -335,7 +330,7 @@
                         addNoteToScene(data.text, change.doc.id);
                     }
                 });
-            });
+            }, (err) => console.error("Snapshot error:", err));
         }
 
         function addNoteToScene(text, id) {
@@ -366,14 +361,12 @@
             requestAnimationFrame(animate);
             const time = Date.now() * 0.001;
 
-            // Orbit Camera
             currentRadius = THREE.MathUtils.lerp(currentRadius, targetRadius, 0.05);
             camera.position.x = currentRadius * Math.sin(phi) * Math.sin(theta);
             camera.position.y = currentRadius * Math.cos(phi);
             camera.position.z = currentRadius * Math.sin(phi) * Math.cos(theta);
             camera.lookAt(0, 4, 0);
 
-            // Orbit Notes
             notes.forEach(n => {
                 const d = n.userData;
                 d.angle += d.speed;
@@ -387,7 +380,6 @@
             renderer.render(scene, camera);
         }
 
-        // --- UI Logic ---
         const openBtn = document.getElementById('open-modal');
         const modal = document.getElementById('note-modal');
         const closeBtn = document.getElementById('close-modal');
@@ -402,14 +394,18 @@
         submitBtn.onclick = async () => {
             const val = document.getElementById('note-text').value.trim();
             if(!val || !user) return;
-            await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'notes'), {
-                text: val, userId: user.uid, timestamp: Date.now()
-            });
-            document.getElementById('note-text').value = "";
-            modal.classList.remove('active');
+            try {
+                const notesCol = collection(db, 'artifacts', 'prayer-app', 'public', 'data', 'notes');
+                await addDoc(notesCol, {
+                    text: val, userId: user.uid, timestamp: Date.now()
+                });
+                document.getElementById('note-text').value = "";
+                modal.classList.remove('active');
+            } catch (err) {
+                console.error("Write error:", err);
+            }
         };
 
-        // Interactions
         window.addEventListener('mousedown', (e) => { isDragging = true; previousMouseX = e.clientX; previousMouseY = e.clientY; });
         window.addEventListener('mousemove', (e) => {
             if (!isDragging) return;
