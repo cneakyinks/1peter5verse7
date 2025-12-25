@@ -93,6 +93,9 @@
             text-align: center;
             z-index: 1001;
             pointer-events: auto;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
         }
 
         textarea {
@@ -140,6 +143,43 @@
         .btn-send:disabled {
             opacity: 0.5;
             cursor: not-allowed;
+        }
+
+        /* List Styling */
+        .message-list {
+            text-align: left;
+            overflow-y: auto;
+            margin-top: 1rem;
+            padding-right: 0.5rem;
+        }
+
+        .message-item {
+            padding: 1.25rem 0.5rem;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+            cursor: pointer;
+            transition: background 0.2s ease;
+        }
+
+        .message-item:hover {
+            background: rgba(0,0,0,0.02);
+        }
+
+        .message-item-text {
+            font-family: 'Cormorant Garamond', serif;
+            font-size: 1.1rem;
+            line-height: 1.4;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: #3d352a;
+        }
+
+        .message-item-date {
+            font-size: 9px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: rgba(0,0,0,0.3);
+            margin-top: 4px;
         }
 
         #note-viewer {
@@ -211,6 +251,11 @@
 
         .status-error { background: #991b1b; color: white; display: block !important; }
         .status-success { background: #065f46; color: white; display: block !important; }
+
+        /* Custom Scrollbar for list */
+        .message-list::-webkit-scrollbar { width: 4px; }
+        .message-list::-webkit-scrollbar-track { background: transparent; }
+        .message-list::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
     </style>
 </head>
 <body>
@@ -233,12 +278,22 @@
 
         <footer class="text-center mb-12 flex flex-col items-center">
             <p class="text-[8px] uppercase tracking-[0.3em] opacity-40 mb-6">Pinch to zoom • Drag to rotate • Tap a note to read</p>
-            <button id="open-modal" class="interactive px-12 py-4 rounded-full border border-white/20 bg-white/5 text-white text-[10px] uppercase tracking-widest transition-all hover:bg-white/10 hover:border-white/40">
-                Send a message
-            </button>
+            <div class="flex items-center gap-4">
+                <button id="open-modal" class="interactive px-12 py-4 rounded-full border border-white/20 bg-white/5 text-white text-[10px] uppercase tracking-widest transition-all hover:bg-white/10 hover:border-white/40">
+                    Send a message
+                </button>
+            </div>
         </footer>
+
+        <!-- Bottom Right List Toggle -->
+        <div class="fixed bottom-8 right-8 z-20 pointer-events-auto">
+            <button id="open-list" class="w-12 h-12 rounded-full border border-white/20 bg-white/5 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+            </button>
+        </div>
     </div>
 
+    <!-- Send Modal -->
     <div id="note-modal" class="modal-overlay">
         <div class="parchment" id="parchment-container">
             <h2 class="serif text-2xl md:text-3xl italic mb-4">What are you laying down today?</h2>
@@ -246,6 +301,20 @@
             <div class="flex items-center justify-between mt-6 w-full px-2">
                 <button id="close-modal" class="btn-action btn-cancel interactive">Cancel</button>
                 <button id="submit-note" class="btn-action btn-send interactive">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- List Modal -->
+    <div id="list-modal" class="modal-overlay">
+        <div class="parchment">
+            <h2 class="serif text-3xl italic border-bottom pb-4 text-center">Messages</h2>
+            <div id="message-container" class="message-list interactive">
+                <!-- Items populated by JS -->
+                <div class="text-center py-8 opacity-30 text-xs italic tracking-widest">Gathering letters...</div>
+            </div>
+            <div class="flex justify-center mt-6 w-full">
+                <button id="close-list" class="btn-action btn-send interactive px-12">Close</button>
             </div>
         </div>
     </div>
@@ -273,6 +342,7 @@
         
         let app, db, auth;
         let user = null;
+        let globalNotesData = [];
 
         function showStatus(text, type, duration = 5000) {
             const el = document.getElementById('status-msg');
@@ -428,13 +498,67 @@
             const notesCol = collection(db, 'artifacts', 'prayer-app', 'public', 'data', 'notes');
             onSnapshot(query(notesCol, limit(100)), (snapshot) => {
                 snapshot.docChanges().forEach((change) => {
+                    const data = change.doc.data();
+                    const noteId = change.doc.id;
+                    
                     if (change.type === "added") {
-                        const data = change.doc.data();
-                        addNoteToScene(data.text, change.doc.id, data.createdAt);
+                        addNoteToScene(data.text, noteId, data.createdAt);
                     }
                 });
+                
+                // Update global data for the list view
+                globalNotesData = snapshot.docs.map(doc => ({
+                    id: doc.id,
+                    ...doc.data()
+                })).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+                
+                renderMessageList();
                 hideLoader();
             }, (err) => { hideLoader(); });
+        }
+
+        function renderMessageList() {
+            const container = document.getElementById('message-container');
+            if (!container) return;
+            
+            if (globalNotesData.length === 0) {
+                container.innerHTML = '<div class="text-center py-12 opacity-30 text-xs italic tracking-widest uppercase">No messages yet...</div>';
+                return;
+            }
+
+            container.innerHTML = globalNotesData.map(note => {
+                let displayDate = "Just now";
+                if (note.createdAt) {
+                    const date = note.createdAt.toDate ? note.createdAt.toDate() : new Date(note.createdAt);
+                    displayDate = date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+                }
+                return `
+                    <div class="message-item" data-id="${note.id}">
+                        <div class="message-item-text">${note.text}</div>
+                        <div class="message-item-date">${displayDate}</div>
+                    </div>
+                `;
+            }).join('');
+
+            // Add click events to items
+            container.querySelectorAll('.message-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const note = globalNotesData.find(n => n.id === item.dataset.id);
+                    if (note) {
+                        let displayDate = "Recently";
+                        if (note.createdAt) {
+                            const date = note.createdAt.toDate ? note.createdAt.toDate() : new Date(note.createdAt);
+                            displayDate = date.toLocaleString('en-US', { 
+                                month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' 
+                            });
+                        }
+                        document.getElementById('viewer-content').innerText = note.text;
+                        document.getElementById('note-timestamp').innerText = displayDate;
+                        document.getElementById('list-modal').classList.remove('active');
+                        document.getElementById('note-viewer').classList.add('active');
+                    }
+                });
+            });
         }
 
         function addNoteToScene(text, id, timestamp) {
@@ -532,11 +656,20 @@
         const modal = document.getElementById('note-modal');
         const closeBtn = document.getElementById('close-modal');
         const submitBtn = document.getElementById('submit-note');
+        
+        const openListBtn = document.getElementById('open-list');
+        const listModal = document.getElementById('list-modal');
+        const closeListBtn = document.getElementById('close-list');
+
         const viewer = document.getElementById('note-viewer');
         const closeViewer = document.getElementById('close-viewer');
 
         openBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); modal.classList.add('active'); });
         closeBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); modal.classList.remove('active'); });
+        
+        openListBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); listModal.classList.add('active'); });
+        closeListBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); listModal.classList.remove('active'); });
+
         closeViewer.addEventListener('pointerdown', (e) => { e.stopPropagation(); viewer.classList.remove('active'); });
 
         const handleFormSubmit = async (e) => {
@@ -566,7 +699,7 @@
 
         const container = document.getElementById('canvas-container');
         container.addEventListener('pointerdown', (e) => {
-            if(modal.classList.contains('active') || viewer.classList.contains('active')) return;
+            if(modal.classList.contains('active') || viewer.classList.contains('active') || listModal.classList.contains('active')) return;
             evCache.push(e);
             if (evCache.length === 1) {
                 isDragging = true;
@@ -641,3 +774,4 @@
     </script>
 </body>
 </html>
+
