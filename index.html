@@ -331,13 +331,13 @@
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
 
         const firebaseConfig = {
-            apiKey: "AIzaSyCUyOBWHS4whd1RQA8w1g2W0SFtZ5JX_7w",
+            apiKey: getEnv('VITE_FIREBASE_API_KEY'),
             authDomain: "letters-at-the-cross.firebaseapp.com",
             projectId: "letters-at-the-cross",
             storageBucket: "letters-at-the-cross.firebasestorage.app",
             messagingSenderId: "48618865890",
-            appId: "1:48618865890:web:5ee2cfc5f4d7f8a71e4abb",
-            measurementId: "G-C0LKQMWJLT"
+            appId: getEnv('VITE_FIREBASE_APP_ID'),
+            measurementId: getEnv('VITE_FIREBASE_MEASUREMENT_ID')
         };
         
         let app, db, auth;
