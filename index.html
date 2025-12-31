@@ -250,10 +250,6 @@
 
         .status-error { background: #991b1b; color: white; display: block !important; }
         .status-success { background: #065f46; color: white; display: block !important; }
-
-        .message-list::-webkit-scrollbar { width: 4px; }
-        .message-list::-webkit-scrollbar-track { background: transparent; }
-        .message-list::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
     </style>
 </head>
 <body>
@@ -261,7 +257,10 @@
     <div id="status-msg"></div>
 
     <div id="loading-screen">
-        <p class="serif italic text-xl pulse-soft">Preparing the space...</p>
+        <div class="text-center">
+            <p class="serif italic text-xl pulse-soft">Gathering letters...</p>
+            <p id="auth-status-text" class="text-[8px] uppercase tracking-[0.4em] mt-4 opacity-40">Connecting to space</p>
+        </div>
     </div>
 
     <div id="canvas-container"></div>
@@ -283,7 +282,10 @@
             </div>
         </footer>
 
-        <div class="fixed bottom-8 right-8 z-20 pointer-events-auto">
+        <div class="fixed bottom-8 right-8 z-20 pointer-events-auto flex flex-col gap-4">
+             <button id="refresh-data" class="w-10 h-10 rounded-full border border-white/10 bg-white/5 flex items-center justify-center text-white/30 hover:text-white hover:bg-white/10 transition-all">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"></path><path d="M1 20v-6h6"></path><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+            </button>
             <button id="open-list" class="w-12 h-12 rounded-full border border-white/20 bg-white/5 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
             </button>
@@ -321,20 +323,31 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, doc, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
         import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        // Internal configuration and environment variables
-        const firebaseConfig = JSON.parse(__firebase_config);
+        // Provided Firebase Configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCUyOBWHS4whd1RQA8w1g2W0SFtZ5JX_7w",
+            authDomain: "letters-at-the-cross.firebaseapp.com",
+            projectId: "letters-at-the-cross",
+            storageBucket: "letters-at-the-cross.firebasestorage.app",
+            messagingSenderId: "48618865890",
+            appId: "1:48618865890:web:5ee2cfc5f4d7f8a71e4abb",
+            measurementId: "G-C0LKQMWJLT"
+        };
+
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'prayer-app';
         
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
         const auth = getAuth(app);
 
-        let user = null;
+        let currentUser = null;
         let globalNotesData = [];
+        let unsubscribeNotes = null;
 
+        // UI Helpers
         function showStatus(text, type, duration = 5000) {
             const el = document.getElementById('status-msg');
             if (!el) return;
@@ -353,7 +366,7 @@
             }
         }
 
-        // Three.js State
+        // Three.js Scene Setup
         let scene, camera, renderer, notes = [];
         let noteMeshes = new Map();
         let isDragging = false, dragThresholdMet = false;
@@ -364,11 +377,7 @@
         let shimmerIntensity = 0;
         let shimmerStartTime = 0;
         let mainSpot;
-        const evCache = [];
-        let prevDiff = -1;
         let raycaster = new THREE.Raycaster();
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        raycaster.params.Mesh.threshold = isMobile ? 0.6 : 0.3; 
         let mouse = new THREE.Vector2();
 
         function createStoneTexture() {
@@ -397,7 +406,7 @@
             return geo;
         }
 
-        async function init3D() {
+        function init3D() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x020305);
             scene.fog = new THREE.FogExp2(0x020305, 0.07);
@@ -410,8 +419,7 @@
             document.getElementById('canvas-container').appendChild(renderer.domElement);
 
             scene.add(new THREE.AmbientLight(0xffffff, 0.05));
-            const hemi = new THREE.HemisphereLight(0x445566, 0x111111, 0.5);
-            scene.add(hemi);
+            scene.add(new THREE.HemisphereLight(0x445566, 0x111111, 0.5));
 
             mainSpot = new THREE.SpotLight(0xfffaf0, 2.5, 40, Math.PI/4, 0.7, 1);
             mainSpot.position.set(-5, 8, 10);
@@ -424,11 +432,9 @@
             });
             const cross = new THREE.Group();
             const vert = new THREE.Mesh(new THREE.BoxGeometry(0.6, 8, 0.6), stoneMat);
-            vert.position.y = 4;
-            vert.castShadow = true;
+            vert.position.y = 4; vert.castShadow = true;
             const horiz = new THREE.Mesh(new THREE.BoxGeometry(4.5, 0.6, 0.6), stoneMat);
-            horiz.position.y = 6.2;
-            horiz.castShadow = true;
+            horiz.position.y = 6.2; horiz.castShadow = true;
             cross.add(vert, horiz);
             scene.add(cross);
 
@@ -456,10 +462,8 @@
                     scene.fog.density = 0.07 - (shimmerIntensity * 0.04);
                     mainSpot.intensity = 2.5 + (shimmerIntensity * 4.0);
                 } else {
-                    shimmerStartTime = 0;
-                    shimmerIntensity = 0;
-                    scene.fog.density = 0.07;
-                    mainSpot.intensity = 2.5;
+                    shimmerStartTime = 0; shimmerIntensity = 0;
+                    scene.fog.density = 0.07; mainSpot.intensity = 2.5;
                 }
             }
 
@@ -476,73 +480,83 @@
                 group.position.z = Math.sin(d.angle) * d.radius;
                 group.position.y = d.height + Math.sin(time + d.wobble) * 0.3;
                 group.rotation.y += 0.01;
-                group.rotation.z = Math.sin(time * 0.5 + d.wobble) * 0.1;
-                const paper = group.children[0];
-                paper.material.emissiveIntensity = 0.3 + Math.sin(time * 2 + d.wobble) * 0.2 + (shimmerIntensity * 0.5);
+                group.children[0].material.emissiveIntensity = 0.3 + Math.sin(time * 2 + d.wobble) * 0.2 + (shimmerIntensity * 0.5);
             });
-
-            if (!isDragging && !isMobile) {
-                raycaster.setFromCamera(mouse, camera);
-                const intersects = raycaster.intersectObjects(notes, true);
-                document.body.style.cursor = (intersects.length > 0) ? 'pointer' : 'default';
-            }
 
             renderer.render(scene, camera);
         }
 
-        async function setupApp() {
-            // Auth Flow
-            try {
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await signInAnonymously(auth);
-                }
-            } catch (err) {
-                showStatus("Connection Limited", "error");
-            }
+        // Firebase Logic
+        async function setupAuth() {
+            const statusText = document.getElementById('auth-status-text');
+            
+            return new Promise((resolve) => {
+                const unsubscribe = onAuthStateChanged(auth, (user) => {
+                    if (user) {
+                        currentUser = user;
+                        statusText.innerText = "Presence established";
+                        unsubscribe();
+                        resolve(user);
+                    }
+                });
 
-            onAuthStateChanged(auth, (u) => {
-                user = u;
-                if (user) {
-                    syncData();
-                } else {
-                    hideLoader();
-                }
+                const performSignIn = async () => {
+                    try {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await signInWithCustomToken(auth, __initial_auth_token);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (err) {
+                        console.error("Auth mismatch, trying anonymous...");
+                        await signInAnonymously(auth);
+                    }
+                };
+
+                performSignIn();
             });
         }
 
         function syncData() {
-            if (!user) return;
+            if (!currentUser) return;
+            if (unsubscribeNotes) unsubscribeNotes();
+
+            // RULE 1: Specific path
             const notesCol = collection(db, 'artifacts', appId, 'public', 'data', 'notes');
             
-            onSnapshot(query(notesCol), (snapshot) => {
-                snapshot.docChanges().forEach((change) => {
-                    const data = change.doc.data();
-                    if (change.type === "added") {
-                        addNoteToScene(data.text, change.doc.id, data.createdAt);
-                    }
-                });
-
-                globalNotesData = snapshot.docs.map(doc => ({
-                    id: doc.id,
-                    ...doc.data()
-                })).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-
-                renderMessageList();
+            // Initial manual fetch to ensure data is loaded even if snapshot delays
+            getDocs(notesCol).then(snap => {
+                const data = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                updateInternalState(data);
                 hideLoader();
-            }, (error) => {
-                console.error("Firestore Error:", error);
-                hideLoader();
+            });
+
+            unsubscribeNotes = onSnapshot(notesCol, (snapshot) => {
+                const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                updateInternalState(data);
+            }, (err) => {
+                console.error("Firestore Error:", err);
+                showStatus("Connection interrupted", "error");
             });
         }
 
-        function addNoteToScene(text, id, timestamp) {
-            if (noteMeshes.has(id)) return;
+        function updateInternalState(data) {
+            globalNotesData = data.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
             
-            let displayDate = "Just now";
+            // Add any new ones to the 3D scene
+            globalNotesData.forEach(note => {
+                if (!noteMeshes.has(note.id)) {
+                    addNoteToScene(note.text, note.id, note.createdAt);
+                }
+            });
+
+            renderMessageList();
+        }
+
+        function addNoteToScene(text, id, timestamp) {
+            let displayDate = "Recently";
             if (timestamp) {
-                const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+                const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp.seconds * 1000);
                 displayDate = date.toLocaleString();
             }
 
@@ -556,19 +570,17 @@
             paperMesh.castShadow = true;
             group.add(paperMesh);
 
-            const hitBoxGeo = new THREE.SphereGeometry(isMobile ? 0.6 : 0.4);
+            const hitBoxGeo = new THREE.SphereGeometry(0.5);
             const hitBoxMat = new THREE.MeshBasicMaterial({ transparent: true, opacity: 0 });
             const hitBox = new THREE.Mesh(hitBoxGeo, hitBoxMat);
             group.add(hitBox);
 
             group.userData = {
-                id: id,
-                message: text,
-                time: displayDate,
+                id: id, message: text, time: displayDate,
                 angle: seed * Math.PI * 2,
-                radius: 3 + (seed % 1) * 5,
+                radius: 3 + (seed % 1) * 6,
                 height: 1.5 + (seed % 0.8) * 5,
-                speed: 0.001 + (seed % 0.002),
+                speed: 0.0005 + (seed % 0.001),
                 wobble: seed * 5
             };
 
@@ -579,26 +591,16 @@
 
         function renderMessageList() {
             const container = document.getElementById('message-container');
-            if (!container) return;
-            
             if (globalNotesData.length === 0) {
-                container.innerHTML = '<div class="text-center py-12 opacity-30 text-xs italic tracking-widest uppercase">No messages yet...</div>';
+                container.innerHTML = '<div class="text-center py-12 opacity-30 text-xs italic tracking-widest">No letters yet...</div>';
                 return;
             }
-
-            container.innerHTML = globalNotesData.map(note => {
-                let displayDate = "Recently";
-                if (note.createdAt) {
-                    const date = note.createdAt.toDate ? note.createdAt.toDate() : new Date(note.createdAt);
-                    displayDate = date.toLocaleDateString();
-                }
-                return `
-                    <div class="message-item" data-id="${note.id}">
-                        <div class="message-item-text">${note.text}</div>
-                        <div class="message-item-date">${displayDate}</div>
-                    </div>
-                `;
-            }).join('');
+            container.innerHTML = globalNotesData.map(note => `
+                <div class="message-item" data-id="${note.id}">
+                    <div class="message-item-text">${note.text}</div>
+                    <div class="message-item-date">${note.createdAt ? new Date(note.createdAt.seconds*1000).toLocaleDateString() : 'Just now'}</div>
+                </div>
+            `).join('');
 
             container.querySelectorAll('.message-item').forEach(item => {
                 item.onclick = () => {
@@ -611,7 +613,7 @@
         function openNoteViewer(text, timestamp) {
             let displayDate = "Recently";
             if (timestamp) {
-                const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+                const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp.seconds * 1000);
                 displayDate = date.toLocaleString();
             }
             document.getElementById('viewer-content').innerText = text;
@@ -620,84 +622,67 @@
             document.getElementById('note-viewer').classList.add('active');
         }
 
-        // UI Handlers
-        const modal = document.getElementById('note-modal');
-        const listModal = document.getElementById('list-modal');
-        const viewer = document.getElementById('note-viewer');
-
-        document.getElementById('open-modal').onclick = () => modal.classList.add('active');
-        document.getElementById('close-modal').onclick = () => modal.classList.remove('active');
-        document.getElementById('open-list').onclick = () => listModal.classList.add('active');
-        document.getElementById('close-list').onclick = () => listModal.classList.remove('active');
-        document.getElementById('close-viewer').onclick = () => viewer.classList.remove('active');
+        // Event Listeners
+        document.getElementById('open-modal').onclick = () => document.getElementById('note-modal').classList.add('active');
+        document.getElementById('close-modal').onclick = () => document.getElementById('note-modal').classList.remove('active');
+        document.getElementById('open-list').onclick = () => document.getElementById('list-modal').classList.add('active');
+        document.getElementById('close-list').onclick = () => document.getElementById('list-modal').classList.remove('active');
+        document.getElementById('close-viewer').onclick = () => document.getElementById('note-viewer').classList.remove('active');
+        document.getElementById('refresh-data').onclick = () => syncData();
 
         document.getElementById('submit-note').onclick = async () => {
             const input = document.getElementById('note-text');
             const val = input.value.trim();
-            if (!val || !user) return;
+            if (!val || !currentUser) return;
 
             const btn = document.getElementById('submit-note');
-            btn.disabled = true;
-            btn.innerText = "...";
+            btn.disabled = true; btn.innerText = "...";
 
             try {
                 const notesCol = collection(db, 'artifacts', appId, 'public', 'data', 'notes');
                 await addDoc(notesCol, {
                     text: val,
-                    userId: user.uid,
+                    userId: currentUser.uid,
                     createdAt: serverTimestamp()
                 });
-                
                 shimmerStartTime = Date.now();
                 input.value = "";
-                modal.classList.remove('active');
-                showStatus("Laid at the cross", "success");
+                document.getElementById('note-modal').classList.remove('active');
+                showStatus("Sent to the light", "success");
             } catch (err) {
-                showStatus("Failed to send", "error");
+                showStatus("Prayer delayed. Try again.", "error");
             } finally {
-                btn.disabled = false;
-                btn.innerText = "Send";
+                btn.disabled = false; btn.innerText = "Send";
             }
         };
 
-        // Interaction
         const canvasContainer = document.getElementById('canvas-container');
         canvasContainer.onpointerdown = (e) => {
-            isDragging = true;
-            dragThresholdMet = false;
-            startX = e.clientX;
-            startY = e.clientY;
-            previousMouseX = e.clientX;
-            previousMouseY = e.clientY;
+            isDragging = true; dragThresholdMet = false;
+            startX = e.clientX; startY = e.clientY;
+            previousMouseX = e.clientX; previousMouseY = e.clientY;
         };
 
         window.onpointermove = (e) => {
             mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-
             if (!isDragging) return;
             const moveX = e.clientX - previousMouseX;
             const moveY = e.clientY - previousMouseY;
-            
             if (Math.hypot(e.clientX - startX, e.clientY - startY) > 5) dragThresholdMet = true;
-
             theta -= moveX * 0.005;
             phi = Math.max(0.2, Math.min(Math.PI/2 - 0.1, phi - moveY * 0.005));
-            
-            previousMouseX = e.clientX;
-            previousMouseY = e.clientY;
+            previousMouseX = e.clientX; previousMouseY = e.clientY;
         };
 
-        window.onpointerup = (e) => {
+        window.onpointerup = () => {
             if (isDragging && !dragThresholdMet) {
                 raycaster.setFromCamera(mouse, camera);
                 const hits = raycaster.intersectObjects(notes, true);
                 if (hits.length > 0) {
                     let target = hits[0].object;
                     while(target.parent && !target.userData.message) target = target.parent;
-                    if (target.userData.message) {
-                        openNoteViewer(target.userData.message, target.userData.time);
-                    }
+                    if (target.userData.message) openNoteViewer(target.userData.message, target.userData.time);
                 }
             }
             isDragging = false;
@@ -709,12 +694,11 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         };
 
-        // Start
-        window.onload = () => {
+        window.onload = async () => {
             init3D();
-            setupApp();
-            // Safeguard loader
-            setTimeout(hideLoader, 5000);
+            await setupAuth();
+            syncData();
+            setTimeout(hideLoader, 10000); // Failsafe
         };
     </script>
 </body>
