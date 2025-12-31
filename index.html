@@ -145,7 +145,6 @@
             cursor: not-allowed;
         }
 
-        /* List Styling */
         .message-list {
             text-align: left;
             overflow-y: auto;
@@ -252,7 +251,6 @@
         .status-error { background: #991b1b; color: white; display: block !important; }
         .status-success { background: #065f46; color: white; display: block !important; }
 
-        /* Custom Scrollbar for list */
         .message-list::-webkit-scrollbar { width: 4px; }
         .message-list::-webkit-scrollbar-track { background: transparent; }
         .message-list::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 10px; }
@@ -285,7 +283,6 @@
             </div>
         </footer>
 
-        <!-- Bottom Right List Toggle -->
         <div class="fixed bottom-8 right-8 z-20 pointer-events-auto">
             <button id="open-list" class="w-12 h-12 rounded-full border border-white/20 bg-white/5 flex items-center justify-center text-white/60 hover:text-white hover:bg-white/10 transition-all">
                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
@@ -293,7 +290,6 @@
         </div>
     </div>
 
-    <!-- Send Modal -->
     <div id="note-modal" class="modal-overlay">
         <div class="parchment" id="parchment-container">
             <h2 class="serif text-2xl md:text-3xl italic mb-4">What are you laying down today?</h2>
@@ -305,12 +301,10 @@
         </div>
     </div>
 
-    <!-- List Modal -->
     <div id="list-modal" class="modal-overlay">
         <div class="parchment">
             <h2 class="serif text-3xl italic border-bottom pb-4 text-center">Messages</h2>
             <div id="message-container" class="message-list interactive">
-                <!-- Items populated by JS -->
                 <div class="text-center py-8 opacity-30 text-xs italic tracking-widest">Gathering letters...</div>
             </div>
             <div class="flex justify-center mt-6 w-full">
@@ -326,21 +320,18 @@
     </div>
 
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, serverTimestamp, doc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
 
-        const firebaseConfig = {
-            apiKey: getEnv('VITE_FIREBASE_API_KEY'),
-            authDomain: "letters-at-the-cross.firebaseapp.com",
-            projectId: "letters-at-the-cross",
-            storageBucket: "letters-at-the-cross.firebasestorage.app",
-            messagingSenderId: "48618865890",
-            appId: getEnv('VITE_FIREBASE_APP_ID'),
-            measurementId: getEnv('VITE_FIREBASE_MEASUREMENT_ID')
-        };
+        // Internal configuration and environment variables
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'prayer-app';
         
-        let app, db, auth;
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+
         let user = null;
         let globalNotesData = [];
 
@@ -362,15 +353,7 @@
             }
         }
 
-        try {
-            app = initializeApp(firebaseConfig);
-            db = getFirestore(app);
-            auth = getAuth(app);
-        } catch (e) {
-            showStatus("Initialization Failed", "error", 0);
-            hideLoader();
-        }
-
+        // Three.js State
         let scene, camera, renderer, notes = [];
         let noteMeshes = new Map();
         let isDragging = false, dragThresholdMet = false;
@@ -378,18 +361,14 @@
         let previousMouseX = 0, previousMouseY = 0;
         let theta = Math.PI / 4, phi = Math.PI / 2.5;
         let currentRadius = 15, targetRadius = 15;
-        
         let shimmerIntensity = 0;
         let shimmerStartTime = 0;
         let mainSpot;
-
         const evCache = [];
         let prevDiff = -1;
-
         let raycaster = new THREE.Raycaster();
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         raycaster.params.Mesh.threshold = isMobile ? 0.6 : 0.3; 
-        
         let mouse = new THREE.Vector2();
 
         function createStoneTexture() {
@@ -418,7 +397,7 @@
             return geo;
         }
 
-        async function init() {
+        async function init3D() {
             scene = new THREE.Scene();
             scene.background = new THREE.Color(0x020305);
             scene.fog = new THREE.FogExp2(0x020305, 0.07);
@@ -438,10 +417,6 @@
             mainSpot.position.set(-5, 8, 10);
             mainSpot.castShadow = true;
             scene.add(mainSpot);
-
-            const rimLight = new THREE.SpotLight(0xffffff, 1.5, 30, Math.PI/4, 0.5, 1);
-            rimLight.position.set(5, 5, -5);
-            scene.add(rimLight);
 
             const stoneTex = createStoneTexture();
             const stoneMat = new THREE.MeshStandardMaterial({ 
@@ -466,110 +441,109 @@
             scene.add(ground);
 
             animate();
-
-            if (auth) setupAuth();
-            else hideLoader();
-
-            setTimeout(hideLoader, 6000);
         }
 
-        async function setupAuth() {
-            try {
-                await signInAnonymously(auth);
-                onAuthStateChanged(auth, (u) => { 
-                    user = u; 
-                    if (user) {
-                        showStatus("Connection Established", "success");
-                        syncData(); 
-                    } else hideLoader();
-                });
-            } catch (err) {
-                showStatus("Offline Mode", "error");
-                hideLoader();
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = Date.now() * 0.001;
+
+            if (shimmerStartTime > 0) {
+                const elapsed = Date.now() - shimmerStartTime;
+                const duration = 2000;
+                if (elapsed < duration) {
+                    const progress = elapsed / duration;
+                    shimmerIntensity = Math.sin(progress * Math.PI);
+                    scene.fog.density = 0.07 - (shimmerIntensity * 0.04);
+                    mainSpot.intensity = 2.5 + (shimmerIntensity * 4.0);
+                } else {
+                    shimmerStartTime = 0;
+                    shimmerIntensity = 0;
+                    scene.fog.density = 0.07;
+                    mainSpot.intensity = 2.5;
+                }
             }
+
+            currentRadius = THREE.MathUtils.lerp(currentRadius, targetRadius, 0.1);
+            camera.position.x = currentRadius * Math.sin(phi) * Math.sin(theta);
+            camera.position.y = currentRadius * Math.cos(phi);
+            camera.position.z = currentRadius * Math.sin(phi) * Math.cos(theta);
+            camera.lookAt(0, 4, 0);
+
+            notes.forEach(group => {
+                const d = group.userData;
+                d.angle += d.speed;
+                group.position.x = Math.cos(d.angle) * d.radius;
+                group.position.z = Math.sin(d.angle) * d.radius;
+                group.position.y = d.height + Math.sin(time + d.wobble) * 0.3;
+                group.rotation.y += 0.01;
+                group.rotation.z = Math.sin(time * 0.5 + d.wobble) * 0.1;
+                const paper = group.children[0];
+                paper.material.emissiveIntensity = 0.3 + Math.sin(time * 2 + d.wobble) * 0.2 + (shimmerIntensity * 0.5);
+            });
+
+            if (!isDragging && !isMobile) {
+                raycaster.setFromCamera(mouse, camera);
+                const intersects = raycaster.intersectObjects(notes, true);
+                document.body.style.cursor = (intersects.length > 0) ? 'pointer' : 'default';
+            }
+
+            renderer.render(scene, camera);
         }
 
-        function triggerShimmer() {
-            shimmerStartTime = Date.now();
+        async function setupApp() {
+            // Auth Flow
+            try {
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await signInWithCustomToken(auth, __initial_auth_token);
+                } else {
+                    await signInAnonymously(auth);
+                }
+            } catch (err) {
+                showStatus("Connection Limited", "error");
+            }
+
+            onAuthStateChanged(auth, (u) => {
+                user = u;
+                if (user) {
+                    syncData();
+                } else {
+                    hideLoader();
+                }
+            });
         }
 
         function syncData() {
-            if (!db || !user) return;
-            const notesCol = collection(db, 'artifacts', 'prayer-app', 'public', 'data', 'notes');
-            onSnapshot(query(notesCol, limit(100)), (snapshot) => {
+            if (!user) return;
+            const notesCol = collection(db, 'artifacts', appId, 'public', 'data', 'notes');
+            
+            onSnapshot(query(notesCol), (snapshot) => {
                 snapshot.docChanges().forEach((change) => {
                     const data = change.doc.data();
-                    const noteId = change.doc.id;
-                    
                     if (change.type === "added") {
-                        addNoteToScene(data.text, noteId, data.createdAt);
+                        addNoteToScene(data.text, change.doc.id, data.createdAt);
                     }
                 });
-                
-                // Update global data for the list view
+
                 globalNotesData = snapshot.docs.map(doc => ({
                     id: doc.id,
                     ...doc.data()
                 })).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-                
+
                 renderMessageList();
                 hideLoader();
-            }, (err) => { hideLoader(); });
-        }
-
-        function renderMessageList() {
-            const container = document.getElementById('message-container');
-            if (!container) return;
-            
-            if (globalNotesData.length === 0) {
-                container.innerHTML = '<div class="text-center py-12 opacity-30 text-xs italic tracking-widest uppercase">No messages yet...</div>';
-                return;
-            }
-
-            container.innerHTML = globalNotesData.map(note => {
-                let displayDate = "Just now";
-                if (note.createdAt) {
-                    const date = note.createdAt.toDate ? note.createdAt.toDate() : new Date(note.createdAt);
-                    displayDate = date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
-                }
-                return `
-                    <div class="message-item" data-id="${note.id}">
-                        <div class="message-item-text">${note.text}</div>
-                        <div class="message-item-date">${displayDate}</div>
-                    </div>
-                `;
-            }).join('');
-
-            // Add click events to items
-            container.querySelectorAll('.message-item').forEach(item => {
-                item.addEventListener('click', () => {
-                    const note = globalNotesData.find(n => n.id === item.dataset.id);
-                    if (note) {
-                        let displayDate = "Recently";
-                        if (note.createdAt) {
-                            const date = note.createdAt.toDate ? note.createdAt.toDate() : new Date(note.createdAt);
-                            displayDate = date.toLocaleString('en-US', { 
-                                month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' 
-                            });
-                        }
-                        document.getElementById('viewer-content').innerText = note.text;
-                        document.getElementById('note-timestamp').innerText = displayDate;
-                        document.getElementById('list-modal').classList.remove('active');
-                        document.getElementById('note-viewer').classList.add('active');
-                    }
-                });
+            }, (error) => {
+                console.error("Firestore Error:", error);
+                hideLoader();
             });
         }
 
         function addNoteToScene(text, id, timestamp) {
             if (noteMeshes.has(id)) return;
             
-            let displayDate = "Lately";
+            let displayDate = "Just now";
             if (timestamp) {
                 const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
-                displayDate = date.toLocaleString('en-US', { 
-                    month: 'short', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit' 
-                });
+                displayDate = date.toLocaleString();
             }
 
             const seed = Array.from(id).reduce((acc, char) => acc + char.charCodeAt(0), 0) / 1000;
@@ -603,175 +577,145 @@
             noteMeshes.set(id, group);
         }
 
-        function animate() {
-            requestAnimationFrame(animate);
-            const time = Date.now() * 0.001;
-
-            if (shimmerStartTime > 0) {
-                const elapsed = Date.now() - shimmerStartTime;
-                const duration = 2000;
-                if (elapsed < duration) {
-                    const progress = elapsed / duration;
-                    shimmerIntensity = Math.sin(progress * Math.PI);
-                    scene.fog.density = 0.07 - (shimmerIntensity * 0.04);
-                    mainSpot.intensity = 2.5 + (shimmerIntensity * 4.0);
-                    scene.background.setRGB(0.008 + shimmerIntensity * 0.05, 0.01 + shimmerIntensity * 0.05, 0.02 + shimmerIntensity * 0.05);
-                } else {
-                    shimmerStartTime = 0;
-                    shimmerIntensity = 0;
-                    scene.fog.density = 0.07;
-                    mainSpot.intensity = 2.5;
-                    scene.background.setHex(0x020305);
-                }
-            }
-
-            currentRadius = THREE.MathUtils.lerp(currentRadius, targetRadius, 0.1);
-            camera.position.x = currentRadius * Math.sin(phi) * Math.sin(theta);
-            camera.position.y = currentRadius * Math.cos(phi);
-            camera.position.z = currentRadius * Math.sin(phi) * Math.cos(theta);
-            camera.lookAt(0, 4, 0);
-
-            notes.forEach(group => {
-                const d = group.userData;
-                d.angle += d.speed;
-                group.position.x = Math.cos(d.angle) * d.radius;
-                group.position.z = Math.sin(d.angle) * d.radius;
-                group.position.y = d.height + Math.sin(time + d.wobble) * 0.3;
-                group.rotation.y += 0.01;
-                group.rotation.z = Math.sin(time * 0.5 + d.wobble) * 0.1;
-                const paper = group.children[0];
-                paper.material.emissiveIntensity = 0.3 + Math.sin(time * 2 + d.wobble) * 0.2 + (shimmerIntensity * 0.5);
-            });
-
-            if (!isDragging && !isMobile) {
-                raycaster.setFromCamera(mouse, camera);
-                const intersects = raycaster.intersectObjects(notes, true);
-                document.body.style.cursor = (intersects.length > 0) ? 'pointer' : 'default';
-            }
-
-            renderer.render(scene, camera);
-        }
-
-        const openBtn = document.getElementById('open-modal');
-        const modal = document.getElementById('note-modal');
-        const closeBtn = document.getElementById('close-modal');
-        const submitBtn = document.getElementById('submit-note');
-        
-        const openListBtn = document.getElementById('open-list');
-        const listModal = document.getElementById('list-modal');
-        const closeListBtn = document.getElementById('close-list');
-
-        const viewer = document.getElementById('note-viewer');
-        const closeViewer = document.getElementById('close-viewer');
-
-        openBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); modal.classList.add('active'); });
-        closeBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); modal.classList.remove('active'); });
-        
-        openListBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); listModal.classList.add('active'); });
-        closeListBtn.addEventListener('pointerdown', (e) => { e.stopPropagation(); listModal.classList.remove('active'); });
-
-        closeViewer.addEventListener('pointerdown', (e) => { e.stopPropagation(); viewer.classList.remove('active'); });
-
-        const handleFormSubmit = async (e) => {
-            if (e) e.stopPropagation();
-            const textInput = document.getElementById('note-text');
-            const val = textInput.value.trim();
-            if(!val || !user) return;
-            submitBtn.disabled = true;
-            submitBtn.innerText = "SENDING...";
-            try {
-                const notesCol = collection(db, 'artifacts', 'prayer-app', 'public', 'data', 'notes');
-                await addDoc(notesCol, { text: val, userId: user.uid, createdAt: serverTimestamp() });
-                
-                triggerShimmer();
-                showStatus("MESSAGE SENT", "success");
-                textInput.value = "";
-                modal.classList.remove('active');
-            } catch (err) {
-                showStatus("Error saving message", "error");
-            } finally {
-                submitBtn.disabled = false;
-                submitBtn.innerText = "Send";
-            }
-        };
-
-        submitBtn.addEventListener('pointerdown', handleFormSubmit);
-
-        const container = document.getElementById('canvas-container');
-        container.addEventListener('pointerdown', (e) => {
-            if(modal.classList.contains('active') || viewer.classList.contains('active') || listModal.classList.contains('active')) return;
-            evCache.push(e);
-            if (evCache.length === 1) {
-                isDragging = true;
-                dragThresholdMet = false;
-                startX = e.clientX;
-                startY = e.clientY;
-                previousMouseX = e.clientX;
-                previousMouseY = e.clientY;
-            }
-        });
-
-        window.addEventListener('pointermove', (e) => {
-            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
-            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
-            const index = evCache.findIndex((item) => item.pointerId === e.pointerId);
-            if (index > -1) evCache[index] = e;
-            if (evCache.length === 2) {
-                const curDiff = Math.hypot(evCache[0].clientX - evCache[1].clientX, evCache[0].clientY - evCache[1].clientY);
-                if (prevDiff > 0) {
-                    const zoomSensitivity = 0.05;
-                    targetRadius = Math.max(8, Math.min(35, targetRadius - (curDiff - prevDiff) * zoomSensitivity));
-                }
-                prevDiff = curDiff;
+        function renderMessageList() {
+            const container = document.getElementById('message-container');
+            if (!container) return;
+            
+            if (globalNotesData.length === 0) {
+                container.innerHTML = '<div class="text-center py-12 opacity-30 text-xs italic tracking-widest uppercase">No messages yet...</div>';
                 return;
             }
-            if (!isDragging || evCache.length !== 1) return;
-            const moveX = e.clientX - previousMouseX;
-            const moveY = e.clientY - previousMouseY;
-            if (Math.hypot(e.clientX - startX, e.clientY - startY) > 8) dragThresholdMet = true;
-            theta -= moveX * 0.005;
-            phi = Math.max(0.2, Math.min(Math.PI/2 - 0.2, phi - moveY * 0.005));
-            previousMouseX = e.clientX;
-            previousMouseY = e.clientY;
-        });
 
-        const pointerUpHandler = (e) => {
-            const index = evCache.findIndex((item) => item.pointerId === e.pointerId);
-            if (index > -1) evCache.splice(index, 1);
-            if (evCache.length < 2) prevDiff = -1;
-            if (evCache.length === 0 && isDragging) {
-                if (!dragThresholdMet) {
-                    raycaster.setFromCamera(mouse, camera);
-                    const hits = raycaster.intersectObjects(notes, true);
-                    if (hits.length > 0) {
-                        let target = hits[0].object;
-                        while(target.parent && !target.userData.message) {
-                            target = target.parent;
-                        }
-                        if (target.userData.message) {
-                            document.getElementById('viewer-content').innerText = target.userData.message;
-                            document.getElementById('note-timestamp').innerText = target.userData.time;
-                            viewer.classList.add('active');
-                        }
-                    }
+            container.innerHTML = globalNotesData.map(note => {
+                let displayDate = "Recently";
+                if (note.createdAt) {
+                    const date = note.createdAt.toDate ? note.createdAt.toDate() : new Date(note.createdAt);
+                    displayDate = date.toLocaleDateString();
                 }
-                isDragging = false;
+                return `
+                    <div class="message-item" data-id="${note.id}">
+                        <div class="message-item-text">${note.text}</div>
+                        <div class="message-item-date">${displayDate}</div>
+                    </div>
+                `;
+            }).join('');
+
+            container.querySelectorAll('.message-item').forEach(item => {
+                item.onclick = () => {
+                    const note = globalNotesData.find(n => n.id === item.dataset.id);
+                    if (note) openNoteViewer(note.text, note.createdAt);
+                };
+            });
+        }
+
+        function openNoteViewer(text, timestamp) {
+            let displayDate = "Recently";
+            if (timestamp) {
+                const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+                displayDate = date.toLocaleString();
+            }
+            document.getElementById('viewer-content').innerText = text;
+            document.getElementById('note-timestamp').innerText = displayDate;
+            document.getElementById('list-modal').classList.remove('active');
+            document.getElementById('note-viewer').classList.add('active');
+        }
+
+        // UI Handlers
+        const modal = document.getElementById('note-modal');
+        const listModal = document.getElementById('list-modal');
+        const viewer = document.getElementById('note-viewer');
+
+        document.getElementById('open-modal').onclick = () => modal.classList.add('active');
+        document.getElementById('close-modal').onclick = () => modal.classList.remove('active');
+        document.getElementById('open-list').onclick = () => listModal.classList.add('active');
+        document.getElementById('close-list').onclick = () => listModal.classList.remove('active');
+        document.getElementById('close-viewer').onclick = () => viewer.classList.remove('active');
+
+        document.getElementById('submit-note').onclick = async () => {
+            const input = document.getElementById('note-text');
+            const val = input.value.trim();
+            if (!val || !user) return;
+
+            const btn = document.getElementById('submit-note');
+            btn.disabled = true;
+            btn.innerText = "...";
+
+            try {
+                const notesCol = collection(db, 'artifacts', appId, 'public', 'data', 'notes');
+                await addDoc(notesCol, {
+                    text: val,
+                    userId: user.uid,
+                    createdAt: serverTimestamp()
+                });
+                
+                shimmerStartTime = Date.now();
+                input.value = "";
+                modal.classList.remove('active');
+                showStatus("Laid at the cross", "success");
+            } catch (err) {
+                showStatus("Failed to send", "error");
+            } finally {
+                btn.disabled = false;
+                btn.innerText = "Send";
             }
         };
 
-        window.addEventListener('pointerup', pointerUpHandler);
-        window.addEventListener('pointercancel', pointerUpHandler);
-        window.addEventListener('wheel', (e) => {
-            targetRadius = Math.max(8, Math.min(35, targetRadius + e.deltaY * 0.01));
-        }, { passive: true });
-        window.addEventListener('resize', () => {
+        // Interaction
+        const canvasContainer = document.getElementById('canvas-container');
+        canvasContainer.onpointerdown = (e) => {
+            isDragging = true;
+            dragThresholdMet = false;
+            startX = e.clientX;
+            startY = e.clientY;
+            previousMouseX = e.clientX;
+            previousMouseY = e.clientY;
+        };
+
+        window.onpointermove = (e) => {
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+
+            if (!isDragging) return;
+            const moveX = e.clientX - previousMouseX;
+            const moveY = e.clientY - previousMouseY;
+            
+            if (Math.hypot(e.clientX - startX, e.clientY - startY) > 5) dragThresholdMet = true;
+
+            theta -= moveX * 0.005;
+            phi = Math.max(0.2, Math.min(Math.PI/2 - 0.1, phi - moveY * 0.005));
+            
+            previousMouseX = e.clientX;
+            previousMouseY = e.clientY;
+        };
+
+        window.onpointerup = (e) => {
+            if (isDragging && !dragThresholdMet) {
+                raycaster.setFromCamera(mouse, camera);
+                const hits = raycaster.intersectObjects(notes, true);
+                if (hits.length > 0) {
+                    let target = hits[0].object;
+                    while(target.parent && !target.userData.message) target = target.parent;
+                    if (target.userData.message) {
+                        openNoteViewer(target.userData.message, target.userData.time);
+                    }
+                }
+            }
+            isDragging = false;
+        };
+
+        window.onresize = () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+        };
 
-        init();
+        // Start
+        window.onload = () => {
+            init3D();
+            setupApp();
+            // Safeguard loader
+            setTimeout(hideLoader, 5000);
+        };
     </script>
 </body>
 </html>
-
