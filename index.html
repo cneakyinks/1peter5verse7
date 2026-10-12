@@ -297,7 +297,7 @@
     <div id="note-modal" class="modal-overlay">
         <div class="parchment" id="parchment-container">
             <h2 class="serif text-2xl md:text-3xl italic mb-4">I Lay Down...</h2>
-            <textarea id="note-text" placeholder="type here..." class="interactive"></textarea>
+            <textarea id="note-text" placeholder="type here..." class="interactive" maxlength="1000"></textarea>
             <div class="flex items-center justify-between mt-6 w-full px-2">
                 <button id="close-modal" class="btn-action btn-cancel interactive">Cancel</button>
                 <button id="submit-note" class="btn-action btn-send interactive">Send</button>
@@ -327,7 +327,7 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-app.js";
-        import { getFirestore, collection, addDoc, onSnapshot, query, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, limit, serverTimestamp } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-firestore.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.1.0/firebase-auth.js";
 
         const firebaseConfig = {
@@ -496,7 +496,7 @@
         function syncData() {
             if (!db || !user) return;
             const notesCol = collection(db, 'artifacts', 'prayer-app', 'public', 'data', 'notes');
-            onSnapshot(query(notesCol, limit(100)), (snapshot) => {
+            onSnapshot(query(notesCol, orderBy('createdAt', 'desc'), limit(100)), (snapshot) => {
                 snapshot.docChanges().forEach((change) => {
                     const data = change.doc.data();
                     const noteId = change.doc.id;
@@ -526,19 +526,24 @@
                 return;
             }
 
-            container.innerHTML = globalNotesData.map(note => {
+            container.replaceChildren(...globalNotesData.map(note => {
                 let displayDate = "Just now";
                 if (note.createdAt) {
-                    const date = note.createdAt.toDate ? note.createdAt.toDate() : new Date(note.createdAt);
-                    displayDate = date.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+                    const d = note.createdAt.toDate ? note.createdAt.toDate() : new Date(note.createdAt);
+                    displayDate = d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
                 }
-                return `
-                    <div class="message-item" data-id="${note.id}">
-                        <div class="message-item-text">${note.text}</div>
-                        <div class="message-item-date">${displayDate}</div>
-                    </div>
-                `;
-            }).join('');
+                const itemEl = document.createElement('div');
+                itemEl.className = 'message-item';
+                itemEl.dataset.id = note.id;
+                const textEl = document.createElement('div');
+                textEl.className = 'message-item-text';
+                textEl.textContent = note.text;
+                const dateEl = document.createElement('div');
+                dateEl.className = 'message-item-date';
+                dateEl.textContent = displayDate;
+                itemEl.append(textEl, dateEl);
+                return itemEl;
+            }));
 
             // Add click events to items
             container.querySelectorAll('.message-item').forEach(item => {
